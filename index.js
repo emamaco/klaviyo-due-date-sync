@@ -9,6 +9,19 @@ app.post("/api/sync-due-date", async (req, res) => {
   const { email, due_date } = req.body;
   if (!email || !due_date) return res.status(400).json({ error: "Missing email or due_date" });
 
+  const parseKlaviyoDate = (input) => {
+    const parts = input.split("/");
+    if (parts.length !== 3) return null;
+    const [month, day, year] = parts;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  };
+
+  const cleanDate = parseKlaviyoDate(due_date);
+  if (!cleanDate) {
+    console.log("Invalid date format from Klaviyo:", due_date);
+    return res.status(400).json({ error: "Invalid due date format" });
+  }
+
   try {
     // Lookup customer by email
     const customerResp = await axios.get(`https://${process.env.SHOP}.myshopify.com/admin/api/2023-10/customers/search.json?query=email:${email}`, {
@@ -30,7 +43,7 @@ app.post("/api/sync-due-date", async (req, res) => {
             {
               namespace: "journey",
               key: "due_date",
-              value: due_date,
+              value: cleanDate,
               type: "date"
             },
             {
@@ -59,7 +72,7 @@ app.post("/api/sync-due-date", async (req, res) => {
       {
         namespace: "journey",
         key: "due_date",
-        value: due_date,
+        value: cleanDate,
         type: "date",
       },
       {
