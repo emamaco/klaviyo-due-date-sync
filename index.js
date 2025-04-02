@@ -17,8 +17,42 @@ app.post("/api/sync-due-date", async (req, res) => {
       },
     });
 
-    const customer = customerResp.data.customers[0];
-    if (!customer) return res.status(404).json({ error: "Customer not found" });
+    let customer = customerResp.data.customers[0];
+
+    if (!customer) {
+      console.log("Customer not found, creating new:", email);
+
+      const createResp = await axios.post(`https://${process.env.SHOP}.myshopify.com/admin/api/2023-10/customers.json`, {
+        customer: {
+          email: email,
+          tags: "klaviyo-auto-created",
+          metafields: [
+            {
+              namespace: "journey",
+              key: "due_date",
+              value: due_date,
+              type: "date"
+            },
+            {
+              namespace: "journey",
+              key: "due_date_type",
+              value: "manual",
+              type: "single_line_text_field"
+            }
+          ]
+        }
+      }, {
+        headers: {
+          "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_TOKEN,
+          "Content-Type": "application/json"
+        }
+      });
+
+      console.log("New customer created:", createResp.data.customer.id);
+      return res.status(200).json({ success: true, customer_created: true });
+    }
+
+    console.log("Found customer ID:", customer.id);
 
     // Update metafields
     const metafields = [
@@ -36,7 +70,7 @@ app.post("/api/sync-due-date", async (req, res) => {
       },
     ];
 
-    await Promise.all(metafields.map((mf) =>
+    const results = await Promise.all(metafields.map((mf) =>
       axios.post(`https://${process.env.SHOP}.myshopify.com/admin/api/2023-10/customers/${customer.id}/metafields.json`, {
         metafield: mf,
       }, {
@@ -47,9 +81,11 @@ app.post("/api/sync-due-date", async (req, res) => {
       })
     ));
 
+    console.log("Metafields updated:", results.map(r => r.data));
     return res.status(200).json({ success: true });
+
   } catch (err) {
-    console.error(err.response?.data || err.message);
+    console.error("Webhook error:", err.response?.data || err.message);
     return res.status(500).json({ error: "Something went wrong" });
   }
 });
